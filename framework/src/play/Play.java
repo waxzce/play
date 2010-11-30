@@ -400,7 +400,7 @@ public class Play {
             Logger.setUp(logLevel);
 
             // Locales
-            langs = Arrays.asList(configuration.getProperty("application.langs", "").split(","));
+            langs = new ArrayList(Arrays.asList(configuration.getProperty("application.langs", "").split(",")));
             if (langs.size() == 1 && langs.get(0).trim().length() == 0) {
                 langs = new ArrayList<String>(16);
             }
@@ -425,7 +425,17 @@ public class Play {
 
             // Plugins
             for (PlayPlugin plugin : plugins) {
-                plugin.onApplicationStart();
+                try {
+                    plugin.onApplicationStart();
+                } catch(Exception e) {
+                    if(Play.mode.isProd()) {
+                        Logger.error(e, "Can't start in PROD mode with errors");
+                    }
+                    if(e instanceof RuntimeException) {
+                        throw (RuntimeException)e;
+                    }
+                    throw new UnexpectedException(e);
+                }
             }
 
             if (firstStart) {

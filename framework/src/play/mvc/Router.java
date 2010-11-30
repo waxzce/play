@@ -20,6 +20,7 @@ import play.Play.Mode;
 import play.PlayPlugin;
 import play.vfs.VirtualFile;
 import play.exceptions.NoRouteFoundException;
+import play.exceptions.UnexpectedException;
 import play.mvc.results.NotFound;
 import play.mvc.results.RenderStatic;
 import play.templates.TemplateLoader;
@@ -247,6 +248,9 @@ public class Router {
                 if (t instanceof RenderStatic) {
                     throw (RenderStatic) t;
                 }
+                if (t instanceof NotFound) {
+                    throw (NotFound) t;
+                }
             }
         }
     }
@@ -275,6 +279,9 @@ public class Router {
                     for (String arg : request.routeArgs.keySet()) {
                         request.action = request.action.replace("{" + arg + "}", request.routeArgs.get(arg));
                     }
+                }
+                if (request.action.equals("404")) {
+                    throw new NotFound(route.path);
                 }
                 return route;
             }
@@ -451,10 +458,18 @@ public class Router {
                                 if (List.class.isAssignableFrom(value.getClass())) {
                                     @SuppressWarnings("unchecked")
                                     List<Object> vals = (List<Object>) value;
-                                    path = path.replaceAll("\\{(<[^>]+>)?" + key + "\\}", vals.get(0).toString().replace("$", "\\$") + "");
+                                    try {
+                                        path = path.replaceAll("\\{(<[^>]+>)?" + key + "\\}", URLEncoder.encode(vals.get(0).toString().replace("$", "\\$"), "utf-8"));
+                                    } catch(UnsupportedEncodingException e) {
+                                        throw new UnexpectedException(e);
+                                    }
                                 } else {
-                                    path = path.replaceAll("\\{(<[^>]+>)?" + key + "\\}", value.toString().replace("$", "\\$") + "");
-                                    host = host.replaceAll("\\{(<[^>]+>)?" + key + "\\}", value.toString().replace("$", "\\$") + "");
+                                    try {
+                                        path = path.replaceAll("\\{(<[^>]+>)?" + key + "\\}", URLEncoder.encode(value.toString().replace("$", "\\$"), "utf-8").replace("%3A", ":").replace("%40", "@"));
+                                        host = host.replaceAll("\\{(<[^>]+>)?" + key + "\\}", URLEncoder.encode(value.toString().replace("$", "\\$"), "utf-8").replace("%3A", ":").replace("%40", "@"));
+                                    } catch(UnsupportedEncodingException e) {
+                                        throw new UnexpectedException(e);
+                                    }
                                 }
                             } else if (route.staticArgs.containsKey(key)) {
                                 // Do nothing -> The key is static
@@ -775,6 +790,10 @@ public class Router {
                 }
                 // Extract the host variable
                 if (matcher.matches() && contains(accept) && hostMatches) {
+                    // 404
+                    if (action.equals("404")) {
+                        throw new NotFound(method, path);
+                    }
                     // Static dir
                     if (staticDir != null) {
                         String resource = null;
